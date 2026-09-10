@@ -15,13 +15,14 @@
  */
 
 import rsocketbuild.*
+import kotlinx.benchmark.gradle.*
 
 plugins {
     id("rsocketbuild.multiplatform-benchmarks")
 }
 
 kotlin {
-    jvmTarget()
+    jvmTarget(jdkVersion = 21)
 
     macosX64()
     macosArm64()
@@ -84,4 +85,18 @@ benchmark {
             param("channels", "S", "M")
         }
     }
+
+    listOf("requestResponse", "requestStream", "requestChannel").forEach { operation ->
+        configurations.register("ktorTcpDispatcher${operation.replaceFirstChar { it.uppercase() }}") {
+            reportFormat = "csv"
+            advanced("jvmForks", 3)
+            include("KtorTcpDispatcherRSocketKotlinBenchmark.${operation}Concurrent")
+            param("dispatcher", "DEFAULT", "LOOM")
+        }
+    }
 }
+
+// The dispatcher comparison is JVM-only because virtual threads require Java 21.
+tasks.withType<NativeBenchmarkExec>()
+    .named { it.contains("KtorTcpDispatcher") }
+    .configureEach { onlyIf { false } }

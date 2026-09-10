@@ -61,7 +61,7 @@ private class KtorTcpServerTransportBuilderImpl : KtorTcpServerTransportBuilder 
 
     @RSocketTransportApi
     override fun buildTransport(context: CoroutineContext): KtorTcpServerTransport = KtorTcpServerTransportImpl(
-        coroutineContext = context.supervisorContext() + Dispatchers.Default,
+        coroutineContext = Dispatchers.Default + context.supervisorContext(),
         socketOptions = socketOptions,
         selectorManager = selectorManager ?: SelectorManager(Dispatchers.IoCompatible),
         manageSelectorManager = manageSelectorManager

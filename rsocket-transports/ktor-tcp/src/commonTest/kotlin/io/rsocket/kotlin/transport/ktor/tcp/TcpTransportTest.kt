@@ -21,6 +21,7 @@ import io.ktor.network.sockets.*
 import io.rsocket.kotlin.internal.io.*
 import io.rsocket.kotlin.transport.tests.*
 import kotlinx.coroutines.*
+import kotlin.coroutines.*
 import kotlin.test.*
 
 @Suppress("DEPRECATION_ERROR")
@@ -36,6 +37,22 @@ class KtorTcpTransportTest : TransportTest() {
     // a single SelectorManager for both client and server works much better in K/N
     // in user code in most of the cases, only one SelectorManager will be created
     private val selector = SelectorManager(Dispatchers.IoCompatible)
+
+    @Test
+    fun customDispatcherIsPreserved() {
+        val job = Job()
+        val context = job + Dispatchers.Unconfined
+        try {
+            val serverTransport = KtorTcpServerTransport(context)
+            val clientTransport = KtorTcpClientTransport(context)
+
+            assertSame(Dispatchers.Unconfined, serverTransport.coroutineContext[ContinuationInterceptor])
+            assertSame(Dispatchers.Unconfined, clientTransport.coroutineContext[ContinuationInterceptor])
+        } finally {
+            job.cancel()
+        }
+    }
+
     override suspend fun before() {
         val server = startServer(KtorTcpServerTransport(testContext) {
             selectorManager(selector, false)

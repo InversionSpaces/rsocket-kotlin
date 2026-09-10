@@ -27,20 +27,30 @@ import kotlinx.coroutines.*
 @Warmup(iterations = WARMUP, time = WARMUP_DURATION)
 @Measurement(iterations = ITERATION, time = ITERATION_DURATION)
 @State(Scope.Benchmark)
-class KtorTcpRSocketKotlinBenchmark : RSocketKotlinBenchmark() {
+open class KtorTcpRSocketKotlinBenchmark : RSocketKotlinBenchmark() {
+
+    // Ktor TCP connections inherit this dispatcher, and RSocket core processing then inherits
+    // each connection's coroutine context. Socket readiness remains on selectorDispatcher.
+    protected open val connectionDispatcher: CoroutineDispatcher? = null
+    protected open val selectorDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+    private val transportContext by lazy {
+        val context = benchJob + CoroutineExceptionHandler { _, _ -> }
+        connectionDispatcher?.let(context::plus) ?: context
+    }
 
     private val selector by lazy {
-        SelectorManager(Dispatchers.IO)
+        SelectorManager(selectorDispatcher)
     }
 
     override val serverTarget: RSocketServerTarget<*> by lazy {
-        KtorTcpServerTransport(benchJob + CoroutineExceptionHandler { _, _ -> }) {
+        KtorTcpServerTransport(transportContext) {
             selectorManager(selector, manage = false)
         }.target()
     }
 
     override fun clientTarget(serverInstance: RSocketServerInstance): RSocketClientTarget {
-        return KtorTcpClientTransport(benchJob + CoroutineExceptionHandler { _, _ -> }) {
+        return KtorTcpClientTransport(transportContext) {
             selectorManager(selector, manage = false)
         }.target((serverInstance as KtorTcpServerInstance).localAddress)
     }
