@@ -1,0 +1,4 @@
+[submodule "ktor"]
+	path = ktor
+	url = git@github.com:InversionSpaces/ktor.git
+	branch = benchmark-configurable-io-dispatcher

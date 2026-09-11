@@ -30,8 +30,8 @@ private const val CONNECTION_PARALLELISM = 4
 @Measurement(iterations = ITERATION, time = ITERATION_DURATION)
 @Fork(
     value = 3,
-    // Both variants use the same four-worker coroutine scheduler for Ktor's Dispatchers.IO.
-    // Default connection work shares that scheduler; Loom connection work uses four carriers.
+    // Connection, RSocket, and Ktor NIO work all use the selected dispatcher. Both variants
+    // therefore have the same four-worker/carrier parallelism.
     jvmArgsAppend = [
         "-Dkotlinx.coroutines.scheduler.core.pool.size=$CONNECTION_PARALLELISM",
         "-Dkotlinx.coroutines.scheduler.max.pool.size=$CONNECTION_PARALLELISM",

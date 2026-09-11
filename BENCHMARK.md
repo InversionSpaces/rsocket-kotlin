@@ -50,17 +50,22 @@ Results apply to this modified library behavior, not the released implementation
 |----------------------------------|-----------------------------------------|-----------------------------------------------|
 | Connection/RSocket execution     | Default scheduler                       | Virtual threads                               |
 | Connection parallelism           | 4 workers                               | 4 carriers                                    |
-| Ktor NIO pumps                   | `Dispatchers.IO`, sharing the 4 workers | `Dispatchers.IO`, separate 4-worker scheduler |
+| Ktor NIO pumps                   | Default scheduler                       | Virtual threads                               |
 | Selector                         | 1 dedicated thread                      | 1 dedicated thread                            |
 | JMH generator                    | 1 thread                                | 1 thread                                      |
-| Relevant platform-thread ceiling | 6                                       | 10                                            |
+| Relevant platform-thread ceiling | 6                                       | 6                                             |
 
-Ktor hardcodes its NIO [reader](https://github.com/ktorio/ktor/blob/3.1.1/ktor-network/jvm/src/io/ktor/network/sockets/CIOReader.kt#L25)
-and [writer](https://github.com/ktorio/ktor/blob/3.1.1/ktor-network/jvm/src/io/ktor/network/sockets/CIOWriter.kt#L20)
-to `Dispatchers.IO`. Default shares that scheduler; Loom adds a carrier pool. Connection parallelism
-is equal, but total platform-thread capacity is not. CPU cores are not pinned.
+The Ktor submodule patches its NIO reader and writer to use the `ioDispatcher` configured on the
+TCP client or server socket options. The benchmark sets it to the same dispatcher as the connection,
+so both variants have equal four-worker/carrier parallelism. CPU cores are not pinned.
 
 ## Run
+
+Publish the patched Ktor network module before building the benchmark:
+
+```shell
+./ktor/gradlew -p ktor :ktor-network:publishToMavenLocal
+```
 
 ```shell
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherRequestResponseBenchmark --no-parallel --max-workers=1 --no-daemon

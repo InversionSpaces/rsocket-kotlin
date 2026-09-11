@@ -46,12 +46,18 @@ open class KtorTcpRSocketKotlinBenchmark : RSocketKotlinBenchmark() {
     override val serverTarget: RSocketServerTarget<*> by lazy {
         KtorTcpServerTransport(transportContext) {
             selectorManager(selector, manage = false)
+            connectionDispatcher?.let { dispatcher ->
+                socketOptions { ioDispatcher = dispatcher }
+            }
         }.target()
     }
 
     override fun clientTarget(serverInstance: RSocketServerInstance): RSocketClientTarget {
         return KtorTcpClientTransport(transportContext) {
             selectorManager(selector, manage = false)
+            connectionDispatcher?.let { dispatcher ->
+                socketOptions { ioDispatcher = dispatcher }
+            }
         }.target((serverInstance as KtorTcpServerInstance).localAddress)
     }
 
