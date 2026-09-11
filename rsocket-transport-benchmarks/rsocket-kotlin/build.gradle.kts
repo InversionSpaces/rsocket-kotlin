@@ -100,3 +100,31 @@ benchmark {
 tasks.withType<NativeBenchmarkExec>()
     .named { it.contains("KtorTcpDispatcher") }
     .configureEach { onlyIf { false } }
+
+tasks.withType<org.gradle.jvm.tasks.Jar>()
+    .matching { it.name == "jvmBenchmarkJar" }
+    .configureEach {
+        exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
+    }
+
+listOf("Loom", "Default").forEach { dispatcher ->
+    tasks.register<JavaExec>("profile${dispatcher}RequestStream") {
+        group = "benchmark"
+        description = "Profile the $dispatcher request-stream benchmark with JFR (one fork); set -PasyncProfilerLib for native JVM stacks."
+        dependsOn("jvmBenchmarkJar")
+        classpath(files(provider {
+            tasks.named<org.gradle.jvm.tasks.Jar>("jvmBenchmarkJar").get().archiveFile.get().asFile
+        }))
+        mainClass.set("org.openjdk.jmh.Main")
+        // Async-profiler captures native JVM execution as well as Java stacks, in JFR format.
+        val profiler = providers.gradleProperty("asyncProfilerLib").map { library ->
+            "async:libPath=$library;event=cpu;output=jfr;cstack=fp"
+        }.getOrElse("jfr")
+        args(
+            "^io[.]rsocket[.]kotlin[.]transport[.]benchmarks[.]kotlin[.]KtorTcpDispatcherRSocketKotlinBenchmark[.]requestStreamConcurrent$",
+            "-p", "dispatcher=${dispatcher.uppercase()}",
+            "-f", "1",
+            "-prof", profiler
+        )
+    }
+}
