@@ -22,6 +22,20 @@ plugins {
     alias(libs.plugins.kotlinx.atomicfu) apply false
 }
 
+allprojects {
+    providers.gradleProperty("kotlinxCoroutinesVersion").orNull?.let { coroutinesVersion ->
+        require(coroutinesVersion.isNotBlank()) { "kotlinxCoroutinesVersion must not be blank" }
+        configurations.configureEach {
+            resolutionStrategy.eachDependency {
+                // Override transitive modules and the BOM as well, so Ktor cannot select another version.
+                if (requested.group == "org.jetbrains.kotlinx" && requested.name.startsWith("kotlinx-coroutines-")) {
+                    useVersion(coroutinesVersion)
+                }
+            }
+        }
+    }
+}
+
 plugins.withType<NodeJsRootPlugin> {
     // ignore package lock
     extensions.configure<NpmExtension> {

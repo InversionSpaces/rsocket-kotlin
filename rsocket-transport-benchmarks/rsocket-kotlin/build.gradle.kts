@@ -90,6 +90,12 @@ benchmark {
     }
 
     listOf("requestResponse", "requestStream", "requestChannel").forEach { operation ->
+        configurations.register("ktorTcpDispatcherDefault${operation.replaceFirstChar { it.uppercase() }}") {
+            reportFormat = "csv"
+            advanced("jvmForks", 3)
+            include("KtorTcpDispatcherRSocketKotlinBenchmark.${operation}Concurrent")
+            param("dispatcher", "DEFAULT")
+        }
         configurations.register("ktorTcpDispatcher${operation.replaceFirstChar { it.uppercase() }}") {
             reportFormat = "csv"
             advanced("jvmForks", 3)

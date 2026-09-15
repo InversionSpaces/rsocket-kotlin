@@ -8,6 +8,7 @@ why virtual-thread dispatchers lag behind `Dispatchers.Default`.
 | 1. Connection dispatcher inheritance | Default, Loom (VT per task)                                                    | Request-response, request-stream, request-channel |
 | 2. Ktor I/O dispatcher patch         | Default, Loom; socket I/O uses the same dispatcher                             | Request-response, request-stream, request-channel |
 | 3. VT lifecycle amortization         | Default, Loom, batches of 1/4/16/64, Loom with `limitedParallelism(1/4/16/64)` | Request-stream                                    |
+| 4. Coroutine-local virtual threads   | Standard Default, experimental virtual-thread Default                          | Request-stream                                    |
 
 ## Common setup
 
@@ -163,6 +164,26 @@ Observations:
 - These results support amortizing VT overhead, but do not isolate creation cost from scheduling,
   queue contention, or locality.
 
+## Fourth attempt: coroutine-local virtual threads
+
+### Hypothesis and implementation
+
+An experimental `kotlinx.coroutines` build changes `Dispatchers.Default`: each coroutine `Job`
+gets a virtual thread which remains alive across its suspensions. Its continuations are queued to
+that virtual thread, preserving coroutine locality without changing the application dispatcher.
+
+The benchmark accepts `-PkotlinxCoroutinesVersion=<version>`. The override applies to transitive
+coroutines dependencies too, so Ktor cannot select the standard version.
+
+### Results
+
+Same patched Ktor request-stream workload and JMH configuration as the previous attempt.
+
+| `Dispatchers.Default` implementation | Throughput, ops/s | vs standard |
+|--------------------------------------|------------------:|------------:|
+| Standard `kotlinx.coroutines` 1.10.1 |    6.206 +- 0.051 |        0.0% |
+| Virtual-thread build                 |    4.014 +- 0.076 |      -35.3% |
+
 ## Reproduce the current benchmarks
 
 Publish the patched Ktor network module before building the benchmark:
@@ -181,4 +202,11 @@ Run the batching and limited-parallelism comparison:
 
 ```shell
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherBatchingRequestStreamBenchmark --no-parallel --max-workers=1 --no-daemon
+```
+
+Run only Default with the standard or experimental coroutines version:
+
+```shell
+./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherDefaultRequestStreamBenchmark --no-parallel --max-workers=1 --no-daemon
+./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherDefaultRequestStreamBenchmark -PkotlinxCoroutinesVersion=1.10.1-virtual-threads --no-parallel --max-workers=1 --no-daemon
 ```
