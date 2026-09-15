@@ -1,16 +1,15 @@
 # JVM dispatcher benchmark
 
-Measures rsocket-kotlin client/server throughput over a Ktor TCP loopback connection with either
-`Dispatchers.Default` or `Executors.newVirtualThreadPerTaskExecutor().asCoroutineDispatcher()`.
+Tracks rsocket-kotlin client/server throughput over a Ktor TCP loopback connection, investigating
+why virtual-thread dispatchers lag behind `Dispatchers.Default`.
 
-## Matrix
+| Investigation stage                  | Dispatcher variants                                                            | Measured operations                               |
+|--------------------------------------|--------------------------------------------------------------------------------|---------------------------------------------------|
+| 1. Connection dispatcher inheritance | Default, Loom (VT per task)                                                    | Request-response, request-stream, request-channel |
+| 2. Ktor I/O dispatcher patch         | Default, Loom; socket I/O uses the same dispatcher                             | Request-response, request-stream, request-channel |
+| 3. VT lifecycle amortization         | Default, Loom, batches of 1/4/16/64, Loom with `limitedParallelism(1/4/16/64)` | Request-stream                                    |
 
-| Parameter             | Values                                            |
-|-----------------------|---------------------------------------------------|
-| Operations            | request-response, request-stream, request-channel |
-| Connection dispatcher | Default, Loom                                     |
-
-## Setup
+## Common setup
 
 | Setting   | Value                                                    |
 |-----------|----------------------------------------------------------|
@@ -25,10 +24,11 @@ Measures rsocket-kotlin client/server throughput over a Ktor TCP loopback connec
 | Request-stream   | One request, response stream |                 100 |                5,000 |
 | Request-channel  | Bidirectional streams        |                  10 |                5,000 |
 
-- [Dispatcher matrix](rsocket-transport-benchmarks/rsocket-kotlin/src/jvmMain/kotlin/KtorTcpDispatcherRSocketKotlinBenchmark.kt#L26-L77)
-- [Transport setup](rsocket-transport-benchmarks/rsocket-kotlin/src/commonMain/kotlin/KtorTcpRSocketKotlinBenchmark.kt#L32-L56)
-- [RSocket workload](rsocket-transport-benchmarks/rsocket-kotlin/src/commonMain/kotlin/RSocketKotlinBenchmark.kt#L43-L85)
-- [Batching and generators](rsocket-transport-benchmarks/base/src/commonMain/kotlin/RSocketTransportBenchmark.kt#L48-L105)
+- [Dispatcher variants](rsocket-transport-benchmarks/rsocket-kotlin/src/jvmMain/kotlin/KtorTcpDispatcherRSocketKotlinBenchmark.kt#L99-L128)
+- [Transport setup](rsocket-transport-benchmarks/rsocket-kotlin/src/commonMain/kotlin/KtorTcpRSocketKotlinBenchmark.kt#L32-L62)
+- [RSocket workload](rsocket-transport-benchmarks/rsocket-kotlin/src/commonMain/kotlin/RSocketKotlinBenchmark.kt#L36-L85)
+- [Workload generators](rsocket-transport-benchmarks/base/src/commonMain/kotlin/RSocketTransportBenchmark.kt#L48-L105)
+- [VT batching implementation](rsocket-transport-benchmarks/rsocket-kotlin/src/jvmMain/kotlin/BatchedVirtualThreadDispatcher.kt#L29)
 
 ## First attempt: connection dispatcher inheritance
 
@@ -54,11 +54,11 @@ Results apply to this modified library behavior, not the released implementation
 | JMH generator                    | 1 thread                                | 1 thread                             |
 | Relevant platform-thread ceiling | 6                                       | 10                                   |
 
-Thread ceilings exclude JVM service threads. CPU cores are not pinned in either attempt.
+Thread ceilings exclude JVM service threads. CPU cores are not pinned in these experiments.
 
 ### Results
 
-Scores are batched benchmark invocations per second:
+Scores are complete benchmark invocations per second:
 
 | Operation        |    Default, ops/s |       Loom, ops/s | Loom difference |
 |------------------|------------------:|------------------:|----------------:|
@@ -72,7 +72,7 @@ Errors are 99.9% confidence intervals across 15 samples.
 
 ### Hypothesis and patch
 
-The baseline includes the rsocket-kotlin dispatcher-inheritance fix, but Ktor still runs socket
+The first attempt includes the rsocket-kotlin dispatcher-inheritance fix, but Ktor still runs socket
 I/O on `Dispatchers.IO`. Loom therefore uses two schedulers: four carriers plus four I/O workers.
 We suspected that handoffs and wakeups between them reduced throughput.
 
@@ -120,10 +120,50 @@ on Apple M3 Max / JVM 21.0.10. Throughput above comes from separate JMH benchmar
   amplify that overhead.
 
 Caveats: macOS recordings report `event=cpu` but `engine=wall`; sample shares are not exact CPU
-costs. There are no matching post-patch standard JFR or allocation recordings. Next checks:
-measure profiler overhead and collect allocation profiles before changing buffer pooling.
+costs. There are no matching post-patch standard JFR or allocation recordings. These findings
+motivated the VT batching experiment below; profiling overhead and buffer-pool costs remain unresolved.
 
-## Reproduce the patched benchmark
+## Third attempt: virtual threads per batch
+
+### Hypothesis and implementation
+
+Test whether reusing a VT for several continuation tasks amortizes creation/lifecycle overhead.
+A dispatcher view over the VT-per-task executor drains a shared FIFO queue, executing at most
+`batchSize` tasks per VT and exiting early when the queue empties. There is no stealing or hard worker limit.
+
+We also compare VT-per-task with Kotlin's `limitedParallelism(n)`.
+
+### Resources and results
+
+Same patched Ktor request-stream workload.
+
+| Dispatcher | Batch size | Parallelism limit | Throughput, ops/s | vs Default | Tasks per VT | Empty VTs |
+|------------|-----------:|------------------:|------------------:|-----------:|-------------:|----------:|
+| Default    |          — |                 — |    6.155 +- 0.164 |       0.0% |            — |         — |
+| Loom       |          — |                 — |    3.714 +- 0.350 |     -39.7% |            — |         — |
+| Batch      |          1 |                 — |    3.254 +- 0.036 |     -47.1% |         1.00 |     0.00% |
+| Batch      |          4 |                 — |    4.295 +- 0.046 |     -30.2% |         4.00 |     0.00% |
+| Batch      |         16 |                 — |    5.155 +- 0.041 |     -16.2% |        15.72 |     0.58% |
+| Batch      |         64 |                 — |    5.384 +- 0.130 |     -12.5% |        46.69 |     9.05% |
+| Limited    |          — |                 1 |    4.089 +- 0.009 |     -33.6% |            — |         — |
+| Limited    |          — |                 4 |    4.007 +- 0.072 |     -34.9% |            — |         — |
+| Limited    |          — |                16 |    4.065 +- 0.149 |     -34.0% |            — |         — |
+| Limited    |          — |                64 |    3.961 +- 0.068 |     -35.6% |            — |         — |
+
+`vs Default` is the throughput difference relative to Default; negative values mean lower throughput.
+Parallelism limit is the `n` in `limitedParallelism(n)`.
+
+Observations:
+- **Batching helps:** batch 64 is 65.4% faster than batch 1 and 45.0% faster than plain
+  Loom, but remains 12.5% below Default. 
+- Plain Loom has substantial fork-to-fork variation.
+- Actual reuse rises to 46.69 tasks per VT. At batch 64, 9.05% of VTs find no work; other workers
+  can drain the queue before a reserved worker starts.
+- Limited parallelism shows no clear gain over Loom within the reported uncertainty.
+- These results support amortizing VT overhead, but do not isolate creation cost from scheduling,
+  queue contention, or locality.
+
+## Reproduce the current benchmarks
 
 Publish the patched Ktor network module before building the benchmark:
 
@@ -135,4 +175,10 @@ Publish the patched Ktor network module before building the benchmark:
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherRequestResponseBenchmark --no-parallel --max-workers=1 --no-daemon
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherRequestStreamBenchmark --no-parallel --max-workers=1 --no-daemon
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherRequestChannelBenchmark --no-parallel --max-workers=1 --no-daemon
+```
+
+Run the batching and limited-parallelism comparison:
+
+```shell
+./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherBatchingRequestStreamBenchmark --no-parallel --max-workers=1 --no-daemon
 ```

@@ -29,6 +29,9 @@ kotlin {
     linuxX64()
 
     sourceSets {
+        jvmTest.dependencies {
+            implementation(kotlin("test-junit"))
+        }
         commonMain.dependencies {
             implementation(projects.rsocketTransportBenchmarksBase)
 
@@ -93,10 +96,27 @@ benchmark {
             include("KtorTcpDispatcherRSocketKotlinBenchmark.${operation}Concurrent")
             param("dispatcher", "DEFAULT", "LOOM")
         }
+        configurations.register("ktorTcpDispatcherBatching${operation.replaceFirstChar { it.uppercase() }}") {
+            reportFormat = "csv"
+            advanced("jvmForks", 3)
+            include("KtorTcpDispatcherRSocketKotlinBenchmark.${operation}Concurrent")
+            include("KtorTcpDispatcherBatchingRSocketKotlinBenchmark.${operation}Concurrent")
+            include("KtorTcpDispatcherLimitedRSocketKotlinBenchmark.${operation}Concurrent")
+        }
+        configurations.register("ktorTcpDispatcherLimited${operation.replaceFirstChar { it.uppercase() }}") {
+            reportFormat = "csv"
+            advanced("jvmForks", 3)
+            include("KtorTcpDispatcherLimitedRSocketKotlinBenchmark.${operation}Concurrent")
+        }
     }
 }
 
 // The dispatcher comparison is JVM-only because virtual threads require Java 21.
+tasks.named<Test>("jvmTest") {
+    // Exercise concurrent scheduling with two carrier threads.
+    jvmArgs("-Djdk.virtualThreadScheduler.parallelism=2", "-Djdk.virtualThreadScheduler.maxPoolSize=2")
+}
+
 tasks.withType<NativeBenchmarkExec>()
     .named { it.contains("KtorTcpDispatcher") }
     .configureEach { onlyIf { false } }
@@ -107,8 +127,8 @@ tasks.withType<org.gradle.jvm.tasks.Jar>()
         exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
     }
 
-listOf("Loom", "Default").forEach { dispatcher ->
-    tasks.register<JavaExec>("profile${dispatcher}RequestStream") {
+mapOf("Loom" to "LOOM", "Default" to "DEFAULT", "LoomBatched" to "LOOM_BATCHED").forEach { (name, dispatcher) ->
+    tasks.register<JavaExec>("profile${name}RequestStream") {
         group = "benchmark"
         description = "Profile the $dispatcher request-stream benchmark with JFR (one fork); set -PasyncProfilerLib for native JVM stacks."
         dependsOn("jvmBenchmarkJar")
@@ -120,9 +140,16 @@ listOf("Loom", "Default").forEach { dispatcher ->
         val profiler = providers.gradleProperty("asyncProfilerLib").map { library ->
             "async:libPath=$library;event=cpu;output=jfr;cstack=fp"
         }.getOrElse("jfr")
+        val benchmarkClass = if (dispatcher == "LOOM_BATCHED") {
+            // Default batch size for profiling one case; regular benchmarks run all configured sizes.
+            args("-p", "batchSize=16")
+            "KtorTcpDispatcherBatchingRSocketKotlinBenchmark"
+        } else {
+            args("-p", "dispatcher=$dispatcher")
+            "KtorTcpDispatcherRSocketKotlinBenchmark"
+        }
         args(
-            "^io[.]rsocket[.]kotlin[.]transport[.]benchmarks[.]kotlin[.]KtorTcpDispatcherRSocketKotlinBenchmark[.]requestStreamConcurrent$",
-            "-p", "dispatcher=${dispatcher.uppercase()}",
+            "^io[.]rsocket[.]kotlin[.]transport[.]benchmarks[.]kotlin[.]$benchmarkClass[.]requestStreamConcurrent$",
             "-f", "1",
             "-prof", profiler
         )
