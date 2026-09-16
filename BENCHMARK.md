@@ -168,21 +168,35 @@ Observations:
 
 ### Hypothesis and implementation
 
-An experimental `kotlinx.coroutines` build changes `Dispatchers.Default`: each coroutine `Job`
+Test whether retaining one VT per coroutine amortizes its lifecycle costs and improves locality.
+The experimental `kotlinx.coroutines` build (`1.10.1-virtual-threads-lockfree-SNAPSHOT`) changes
+`Dispatchers.Default`: each coroutine `Job`
 gets a virtual thread which remains alive across its suspensions. Its continuations are queued to
 that virtual thread, preserving coroutine locality without changing the application dispatcher.
 
 The benchmark accepts `-PkotlinxCoroutinesVersion=<version>`. The override applies to transitive
 coroutines dependencies too, so Ktor cannot select the standard version.
 
-### Results
+### Resources and results
 
 Same patched Ktor request-stream workload and JMH configuration as the previous attempt.
 
 | `Dispatchers.Default` implementation | Throughput, ops/s | vs standard |
 |--------------------------------------|------------------:|------------:|
-| Standard `kotlinx.coroutines` 1.10.1 |    6.206 +- 0.051 |        0.0% |
-| Virtual-thread build                 |    4.014 +- 0.076 |      -35.3% |
+| Standard `kotlinx.coroutines` 1.10.1 |    6.155 +- 0.181 |        0.0% |
+| Virtual-thread build                 |    3.874 +- 0.605 |      -37.1% |
+
+Coroutine-local virtual threads remain 37.1% slower than standard Default in this workload.
+
+### Profiler findings
+
+- **Buffer pooling:** L2 `SegmentPool` paths appear in 14.2% of patched samples
+  versus 10.2% for standard. Thread-ID-based buckets can affect reuse across producers and consumers.
+- **Wakeups remain:** patched dispatch stacks include VT unpark and ForkJoinPool signalling.
+  Mean JVM CPU load is 27.9% versus 23.0% for standard.
+
+These macOS recordings use `event=cpu` with `engine=wall`; inclusive sample shares overlap and
+are not exact CPU costs. Neither VT creation cost nor lock-wait duration is isolated.
 
 ## Reproduce the current benchmarks
 
@@ -208,5 +222,5 @@ Run only Default with the standard or experimental coroutines version:
 
 ```shell
 ./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherDefaultRequestStreamBenchmark --no-parallel --max-workers=1 --no-daemon
-./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherDefaultRequestStreamBenchmark -PkotlinxCoroutinesVersion=1.10.1-virtual-threads --no-parallel --max-workers=1 --no-daemon
+./gradlew :rsocket-transport-benchmarks-rsocket-kotlin:jvmKtorTcpDispatcherDefaultRequestStreamBenchmark -PkotlinxCoroutinesVersion=1.10.1-virtual-threads-lockfree-SNAPSHOT --refresh-dependencies --no-parallel --max-workers=1 --no-daemon
 ```
