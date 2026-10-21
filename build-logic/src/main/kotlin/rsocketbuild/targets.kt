@@ -90,7 +90,7 @@ fun KotlinMultiplatformExtension.wasmWasiTarget() {
 
 fun KotlinMultiplatformExtension.jvmTarget(
     jdkVersion: Int = 8,
-    jdkAdditionalTestVersions: Set<Int> = setOf(11, 17, 21),
+    jdkAdditionalTestVersions: Set<Int> = setOf(11, 17, 21, 26),
 ) {
     jvmToolchain(jdkVersion)
     jvm {

@@ -43,19 +43,19 @@ abstract class RSocketTransportBenchmark<Payload : Any, Blackhole : Any> {
     abstract fun setup()
     abstract fun cleanup()
 
-    // benchmarks
+    // Workload helpers have distinct names so typed @Benchmark methods need no generic bridges.
 
-    open fun requestResponseBlocking(bh: Blackhole) = blocking(bh, 1000, ::requestResponse)
-    open fun requestResponseParallel(bh: Blackhole) = parallel(bh, 1000, ::requestResponse)
-    open fun requestResponseConcurrent(bh: Blackhole) = concurrent(bh, 1000, ::requestResponse)
+    protected fun runRequestResponseBlocking(bh: Blackhole) = blocking(bh, 1000, ::requestResponse)
+    protected fun runRequestResponseParallel(bh: Blackhole) = parallel(bh, 1000, ::requestResponse)
+    protected fun runRequestResponseConcurrent(bh: Blackhole) = concurrent(bh, 1000, ::requestResponse)
 
-    open fun requestStreamBlocking(bh: Blackhole) = blocking(bh, 100, ::requestStream)
-    open fun requestStreamParallel(bh: Blackhole) = parallel(bh, 100, ::requestStream)
-    open fun requestStreamConcurrent(bh: Blackhole) = concurrent(bh, 100, ::requestStream)
+    protected fun runRequestStreamBlocking(bh: Blackhole) = blocking(bh, 100, ::requestStream)
+    protected fun runRequestStreamParallel(bh: Blackhole) = parallel(bh, 100, ::requestStream)
+    protected fun runRequestStreamConcurrent(bh: Blackhole) = concurrent(bh, 100, ::requestStream)
 
-    open fun requestChannelBlocking(bh: Blackhole) = blocking(bh, 10, ::requestChannel)
-    open fun requestChannelParallel(bh: Blackhole) = parallel(bh, 10, ::requestChannel)
-    open fun requestChannelConcurrent(bh: Blackhole) = concurrent(bh, 10, ::requestChannel)
+    protected fun runRequestChannelBlocking(bh: Blackhole) = blocking(bh, 10, ::requestChannel)
+    protected fun runRequestChannelParallel(bh: Blackhole) = parallel(bh, 10, ::requestChannel)
+    protected fun runRequestChannelConcurrent(bh: Blackhole) = concurrent(bh, 10, ::requestChannel)
 
     // operations
 

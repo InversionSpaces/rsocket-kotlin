@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ 'ubuntu-latest' ]
-        target: [ 'jvm', 'jvm11', 'jvm17', 'jvm21', 'web', 'native' ]
+        target: [ 'jvm', 'jvm11', 'jvm17', 'jvm21', 'jvm26', 'web', 'native' ]
         include:
           - os: 'macos-latest'
             target: 'macos'

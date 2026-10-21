@@ -19,10 +19,12 @@ runs:
     - uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        # the latest listed version will be used for executions of Gradle
+        # Root builds select Java 26 through daemon JVM criteria.
+        # Keep Java 21 as the launcher for standalone samples using older Gradle wrappers.
         java-version: |
           11
           17
+          26
           21
     - uses: gradle/actions/setup-gradle@v4
       with:

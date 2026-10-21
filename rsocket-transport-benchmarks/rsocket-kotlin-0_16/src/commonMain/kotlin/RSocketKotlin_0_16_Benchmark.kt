@@ -29,7 +29,7 @@ import kotlin.coroutines.*
 import kotlin.random.*
 
 @State(Scope.Benchmark)
-@Suppress("ClassName")
+@Suppress("ClassName", "unused") // Benchmark entry points are called by the generated JMH harness.
 @OptIn(ExperimentalStreamsApi::class)
 abstract class RSocketKotlin_0_16_Benchmark : RSocketTransportBenchmark<Payload, Blackhole>() {
     protected abstract suspend fun clientTransport(server: Any?): ClientTransport
@@ -91,29 +91,29 @@ abstract class RSocketKotlin_0_16_Benchmark : RSocketTransportBenchmark<Payload,
     override var payloadSize: Int = 0
 
     @Benchmark
-    override fun requestResponseBlocking(bh: Blackhole) = super.requestResponseBlocking(bh)
+    fun requestResponseBlocking(bh: Blackhole) = super.runRequestResponseBlocking(bh)
 
     @Benchmark
-    override fun requestResponseParallel(bh: Blackhole) = super.requestResponseParallel(bh)
+    fun requestResponseParallel(bh: Blackhole) = super.runRequestResponseParallel(bh)
 
     @Benchmark
-    override fun requestResponseConcurrent(bh: Blackhole) = super.requestResponseConcurrent(bh)
+    fun requestResponseConcurrent(bh: Blackhole) = super.runRequestResponseConcurrent(bh)
 
     @Benchmark
-    override fun requestStreamBlocking(bh: Blackhole) = super.requestStreamBlocking(bh)
+    fun requestStreamBlocking(bh: Blackhole) = super.runRequestStreamBlocking(bh)
 
     @Benchmark
-    override fun requestStreamParallel(bh: Blackhole) = super.requestStreamParallel(bh)
+    fun requestStreamParallel(bh: Blackhole) = super.runRequestStreamParallel(bh)
 
     @Benchmark
-    override fun requestStreamConcurrent(bh: Blackhole) = super.requestStreamConcurrent(bh)
+    fun requestStreamConcurrent(bh: Blackhole) = super.runRequestStreamConcurrent(bh)
 
     @Benchmark
-    override fun requestChannelBlocking(bh: Blackhole) = super.requestChannelBlocking(bh)
+    fun requestChannelBlocking(bh: Blackhole) = super.runRequestChannelBlocking(bh)
 
     @Benchmark
-    override fun requestChannelParallel(bh: Blackhole) = super.requestChannelParallel(bh)
+    fun requestChannelParallel(bh: Blackhole) = super.runRequestChannelParallel(bh)
 
     @Benchmark
-    override fun requestChannelConcurrent(bh: Blackhole) = super.requestChannelConcurrent(bh)
+    fun requestChannelConcurrent(bh: Blackhole) = super.runRequestChannelConcurrent(bh)
 }

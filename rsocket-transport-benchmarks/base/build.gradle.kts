@@ -21,7 +21,7 @@ plugins {
 }
 
 kotlin {
-    jvmTarget()
+    jvmTarget(jdkVersion = 26, jdkAdditionalTestVersions = emptySet())
 
     macosX64()
     macosArm64()

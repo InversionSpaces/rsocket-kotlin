@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import gradle.kotlin.dsl.accessors._5e24a5abecdb427308a6c627b6f26b4a.allOpen
-import gradle.kotlin.dsl.accessors._5e24a5abecdb427308a6c627b6f26b4a.benchmark
+import org.jetbrains.kotlin.allopen.gradle.AllOpenExtension
+import kotlinx.benchmark.gradle.BenchmarksExtension
 import kotlinx.benchmark.gradle.JvmBenchmarkTarget
 
 plugins {
@@ -24,11 +24,11 @@ plugins {
     id("org.jetbrains.kotlinx.benchmark")
 }
 
-allOpen {
+extensions.configure<AllOpenExtension> {
     annotation("org.openjdk.jmh.annotations.State")
 }
 
-benchmark {
+extensions.configure<BenchmarksExtension> {
     targets.configureEach {
         if (name == "jvm") {
             this as JvmBenchmarkTarget

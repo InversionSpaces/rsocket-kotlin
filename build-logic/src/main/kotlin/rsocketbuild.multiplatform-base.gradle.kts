@@ -15,6 +15,7 @@
  */
 
 import org.jetbrains.kotlin.gradle.*
+import org.jetbrains.kotlin.gradle.dsl.*
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.jetbrains.kotlin.gradle.targets.js.ir.*
@@ -77,7 +78,7 @@ kotlin {
 
     targets.withType<KotlinJvmTarget>().configureEach {
         compilerOptions {
-            freeCompilerArgs.add("-Xjvm-default=all")
+            jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
         }
     }
 

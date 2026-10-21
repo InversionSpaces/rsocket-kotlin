@@ -53,6 +53,7 @@ internal abstract class ConnectionInitializer(
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private suspend fun initialize(connection: RSocketConnection): RSocket {
         val requestsScope = CoroutineScope(connection.coroutineContext.supervisorContext())
         val outbound = wrapConnection(connection, requestsScope)
