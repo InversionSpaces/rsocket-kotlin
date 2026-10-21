@@ -32,5 +32,8 @@ kotlin {
             api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.benchmark)
         }
+        jvmMain.dependencies {
+            implementation("org.openjdk.jmh:jmh-core:1.37")
+        }
     }
 }

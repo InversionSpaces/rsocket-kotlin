@@ -37,6 +37,16 @@ extensions.configure<BenchmarksExtension> {
     }
 }
 
+// Keep kotlinx-benchmark's generated configuration, but use JMH's standard console formatter.
+// The plugin registers its JVM tasks in afterEvaluate, so replace the launcher afterwards.
+afterEvaluate {
+    tasks.withType<JavaExec>()
+        .matching { it.name.startsWith("jvm") && it.name.endsWith("Benchmark") }
+        .configureEach {
+            mainClass.set("io.rsocket.kotlin.transport.benchmarks.JmhBenchmarkRunnerKt")
+        }
+}
+
 if (providers.gradleProperty("rsocketbuild.skipBenchmarkTasks").map(String::toBoolean).getOrElse(false)) {
     tasks.named { it.endsWith("Benchmark") }.configureEach { onlyIf { false } }
 }
