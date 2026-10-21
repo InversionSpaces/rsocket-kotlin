@@ -134,30 +134,49 @@ tasks.withType<org.gradle.jvm.tasks.Jar>()
     }
 
 mapOf("Loom" to "LOOM", "Default" to "DEFAULT", "LoomBatched" to "LOOM_BATCHED").forEach { (name, dispatcher) ->
-    tasks.register<JavaExec>("profile${name}RequestStream") {
-        group = "benchmark"
-        description = "Profile the $dispatcher request-stream benchmark with JFR (one fork); set -PasyncProfilerLib for native JVM stacks."
-        dependsOn("jvmBenchmarkJar")
-        classpath(files(provider {
-            tasks.named<org.gradle.jvm.tasks.Jar>("jvmBenchmarkJar").get().archiveFile.get().asFile
-        }))
-        mainClass.set("org.openjdk.jmh.Main")
-        // Async-profiler captures native JVM execution as well as Java stacks, in JFR format.
-        val profiler = providers.gradleProperty("asyncProfilerLib").map { library ->
-            "async:libPath=$library;event=cpu;output=jfr;cstack=fp"
-        }.getOrElse("jfr")
-        val benchmarkClass = if (dispatcher == "LOOM_BATCHED") {
-            // Default batch size for profiling one case; regular benchmarks run all configured sizes.
-            args("-p", "batchSize=16")
-            "KtorTcpDispatcherBatchingRSocketKotlinBenchmark"
-        } else {
-            args("-p", "dispatcher=$dispatcher")
-            "KtorTcpDispatcherRSocketKotlinBenchmark"
-        }
-        args(
-            "^io[.]rsocket[.]kotlin[.]transport[.]benchmarks[.]kotlin[.]$benchmarkClass[.]requestStreamConcurrent$",
-            "-f", "1",
-            "-prof", profiler
-        )
+    listOf("profile", "singleShot").forEach { runMode ->
+      val taskName = "${runMode}${name}RequestStream"
+      tasks.register<JavaExec>(taskName) {
+          group = "benchmark"
+          description = if (runMode == "profile") {
+              "Profile the $dispatcher request-stream benchmark with JFR (one fork); set -PasyncProfilerLib for native JVM stacks."
+          } else {
+              "Run a fixed number of $dispatcher request-stream invocations; set -PbenchmarkInvocations (default 10)."
+          }
+          dependsOn("jvmBenchmarkJar")
+          classpath(files(provider {
+              tasks.named<org.gradle.jvm.tasks.Jar>("jvmBenchmarkJar").get().archiveFile.get().asFile
+          }))
+          mainClass.set("org.openjdk.jmh.Main")
+          if (runMode == "singleShot") {
+              val invocations = providers.gradleProperty("benchmarkInvocations").getOrElse("10").toInt()
+              require(invocations > 0) { "benchmarkInvocations must be positive" }
+              args("-bm", "ss", "-wi", "5", "-i", invocations.toString(), "-wbs", "1", "-bs", "1")
+          }
+          // Record VT lifetimes only in the JMH fork, including warmup; opt in because events add overhead.
+          if (providers.gradleProperty("virtualThreadEvents").map(String::toBoolean).getOrElse(false)) {
+              val settings = layout.projectDirectory.file("virtual-thread-events.jfc").asFile.absolutePath
+              val recording = layout.buildDirectory.file("$taskName-vt-%p.jfr").get().asFile.absolutePath
+              // Keep the benchmark's @Fork.jvmArgsAppend worker/carrier limits intact.
+              args("-jvmArgs", "\"-XX:StartFlightRecording=settings=$settings,filename=$recording,dumponexit=true\"")
+          }
+          // Async-profiler captures native JVM execution as well as Java stacks, in JFR format.
+          val profiler = providers.gradleProperty("asyncProfilerLib").map { library ->
+              "async:libPath=$library;event=cpu;output=jfr;cstack=fp"
+          }.orNull ?: if (runMode == "profile") "jfr" else null
+          if (profiler != null) args("-prof", profiler)
+          val benchmarkClass = if (dispatcher == "LOOM_BATCHED") {
+              // Default batch size for a single case; regular benchmarks run all configured sizes.
+              args("-p", "batchSize=16")
+              "KtorTcpDispatcherBatchingRSocketKotlinBenchmark"
+          } else {
+              args("-p", "dispatcher=$dispatcher")
+              "KtorTcpDispatcherRSocketKotlinBenchmark"
+          }
+          args(
+              "^io[.]rsocket[.]kotlin[.]transport[.]benchmarks[.]kotlin[.]$benchmarkClass[.]requestStreamConcurrent$",
+              "-f", "1"
+          )
+      }
     }
 }

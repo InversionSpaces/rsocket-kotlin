@@ -25,7 +25,10 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        mavenLocal()
+        mavenLocal {
+            // Maven-cached Kotlin JARs may lack Gradle metadata required to import common source sets.
+            content { excludeGroupAndSubgroups("org.jetbrains.kotlin") }
+        }
         mavenCentral()
         gradlePluginPortal()
     }
