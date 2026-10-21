@@ -35,6 +35,7 @@ private const val CONNECTION_PARALLELISM = 4
     value = 3,
     // Connection, RSocket, and Ktor NIO work all use the selected dispatcher.
     jvmArgsAppend = [
+        "-showversion",
         "-Dkotlinx.coroutines.scheduler.core.pool.size=$CONNECTION_PARALLELISM",
         "-Dkotlinx.coroutines.scheduler.max.pool.size=$CONNECTION_PARALLELISM",
         "-Djdk.virtualThreadScheduler.parallelism=$CONNECTION_PARALLELISM",
